@@ -28,7 +28,7 @@
     "sales",
     "shopify"
   ],
-  "author": "Your Name",
+  "author": "Shahzaib",
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^8.2.2"
