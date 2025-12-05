@@ -1,39 +1,54 @@
 /**
  * Conversation Analytics Model
- * Aggregates conversation statistics
+ * Tracks and analyzes conversation metrics
  */
 
 const { query } = require('../config/database');
 
 class ConversationAnalytics {
   /**
-   * Get conversation statistics for date range
+   * Get overall conversation statistics
    */
-  static async getStats(start_date, end_date) {
-    const sql = `
+  static async getOverallStats(start_date = null, end_date = null) {
+    let sql = `
       SELECT 
-        COUNT(*) as total_conversations,
-        COUNT(CASE WHEN status = 'active' THEN 1 END) as active_conversations,
-        COUNT(CASE WHEN status = 'closed' THEN 1 END) as closed_conversations,
-        AVG(messages_count) as avg_messages_per_conversation,
-        SUM(messages_count) as total_messages
-      FROM conversations
-      WHERE created_at >= $1 AND created_at <= $2
+        COUNT(DISTINCT c.id) as total_conversations,
+        COUNT(DISTINCT c.customer_id) as unique_customers,
+        COUNT(DISTINCT CASE WHEN c.status = 'active' THEN c.id END) as active_conversations,
+        COUNT(DISTINCT CASE WHEN c.status = 'closed' THEN c.id END) as closed_conversations,
+        AVG(c.messages_count) as avg_messages_per_conversation,
+        AVG(EXTRACT(EPOCH FROM (c.updated_at - c.created_at))/60) as avg_duration_minutes
+      FROM conversations c
+      WHERE 1=1
     `;
+    const params = [];
+    let paramCount = 1;
 
-    const result = await query(sql, [start_date, end_date]);
+    if (start_date) {
+      sql += ` AND c.created_at >= $${paramCount}`;
+      params.push(start_date);
+      paramCount++;
+    }
+
+    if (end_date) {
+      sql += ` AND c.created_at <= $${paramCount}`;
+      params.push(end_date);
+    }
+
+    const result = await query(sql, params);
     return result.rows[0];
   }
 
   /**
-   * Get daily conversation count
+   * Get conversation trends (daily counts)
    */
-  static async getDailyCount(days = 30) {
+  static async getDailyTrends(days = 30) {
     const sql = `
       SELECT 
         DATE(created_at) as date,
         COUNT(*) as conversation_count,
-        COUNT(CASE WHEN status = 'closed' THEN 1 END) as closed_count
+        COUNT(DISTINCT customer_id) as unique_customers,
+        AVG(messages_count) as avg_messages
       FROM conversations
       WHERE created_at >= NOW() - INTERVAL '${days} days'
       GROUP BY DATE(created_at)
@@ -45,36 +60,17 @@ class ConversationAnalytics {
   }
 
   /**
-   * Get conversation duration statistics
+   * Get hourly distribution (peak hours)
    */
-  static async getDurationStats(start_date, end_date) {
-    const sql = `
-      SELECT 
-        AVG(EXTRACT(EPOCH FROM (last_message_at - created_at))/60) as avg_duration_minutes,
-        MAX(EXTRACT(EPOCH FROM (last_message_at - created_at))/60) as max_duration_minutes,
-        MIN(EXTRACT(EPOCH FROM (last_message_at - created_at))/60) as min_duration_minutes
-      FROM conversations
-      WHERE created_at >= $1 
-        AND created_at <= $2
-        AND last_message_at IS NOT NULL
-    `;
-
-    const result = await query(sql, [start_date, end_date]);
-    return result.rows[0];
-  }
-
-  /**
-   * Get peak hours
-   */
-  static async getPeakHours(days = 30) {
+  static async getHourlyDistribution() {
     const sql = `
       SELECT 
         EXTRACT(HOUR FROM created_at) as hour,
         COUNT(*) as conversation_count
       FROM conversations
-      WHERE created_at >= NOW() - INTERVAL '${days} days'
+      WHERE created_at >= NOW() - INTERVAL '7 days'
       GROUP BY EXTRACT(HOUR FROM created_at)
-      ORDER BY conversation_count DESC
+      ORDER BY hour ASC
     `;
 
     const result = await query(sql);
@@ -82,38 +78,133 @@ class ConversationAnalytics {
   }
 
   /**
-   * Get response rate (bot vs admin)
+   * Get response time statistics
    */
-  static async getResponseRate(start_date, end_date) {
-    const sql = `
+  static async getResponseTimeStats(start_date = null, end_date = null) {
+    let sql = `
       SELECT 
-        COUNT(DISTINCT CASE WHEN sender = 'bot' THEN conversation_id END) as bot_responses,
-        COUNT(DISTINCT CASE WHEN sender = 'admin' THEN conversation_id END) as admin_responses,
-        COUNT(DISTINCT conversation_id) as total_conversations
-      FROM messages
-      WHERE timestamp >= $1 AND timestamp <= $2
+        AVG(
+          EXTRACT(EPOCH FROM (
+            (SELECT MIN(timestamp) FROM messages 
+             WHERE conversation_id = c.id AND sender = 'bot')
+            -
+            (SELECT MIN(timestamp) FROM messages 
+             WHERE conversation_id = c.id AND sender = 'customer')
+          ))
+        ) as avg_first_response_seconds,
+        AVG(
+          EXTRACT(EPOCH FROM (updated_at - created_at))
+        ) as avg_conversation_duration_seconds
+      FROM conversations c
+      WHERE 1=1
     `;
+    const params = [];
+    let paramCount = 1;
 
-    const result = await query(sql, [start_date, end_date]);
+    if (start_date) {
+      sql += ` AND c.created_at >= $${paramCount}`;
+      params.push(start_date);
+      paramCount++;
+    }
+
+    if (end_date) {
+      sql += ` AND c.created_at <= $${paramCount}`;
+      params.push(end_date);
+    }
+
+    const result = await query(sql, params);
     return result.rows[0];
   }
 
   /**
-   * Get conversation conversion rate
+   * Get conversation by status breakdown
    */
-  static async getConversionRate(start_date, end_date) {
+  static async getStatusBreakdown() {
     const sql = `
       SELECT 
-        COUNT(DISTINCT c.id) as total_conversations,
-        COUNT(DISTINCT o.customer_id) as converted_customers,
-        (COUNT(DISTINCT o.customer_id)::float / NULLIF(COUNT(DISTINCT c.id), 0) * 100) as conversion_rate
-      FROM conversations c
-      LEFT JOIN orders o ON c.customer_id = o.customer_id
-      WHERE c.created_at >= $1 AND c.created_at <= $2
+        status,
+        COUNT(*) as count,
+        ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM conversations), 2) as percentage
+      FROM conversations
+      GROUP BY status
+      ORDER BY count DESC
     `;
 
-    const result = await query(sql, [start_date, end_date]);
+    const result = await query(sql);
+    return result.rows;
+  }
+
+  /**
+   * Get top active customers
+   */
+  static async getTopActiveCustomers(limit = 10) {
+    const sql = `
+      SELECT 
+        c.name,
+        c.phone_number,
+        COUNT(co.id) as conversation_count,
+        SUM(co.messages_count) as total_messages,
+        MAX(co.last_message_at) as last_conversation
+      FROM customers c
+      JOIN conversations co ON c.id = co.customer_id
+      GROUP BY c.id
+      ORDER BY conversation_count DESC
+      LIMIT $1
+    `;
+
+    const result = await query(sql, [limit]);
+    return result.rows;
+  }
+
+  /**
+   * Get conversation completion rate
+   */
+  static async getCompletionRate(start_date = null, end_date = null) {
+    let sql = `
+      SELECT 
+        COUNT(*) as total,
+        COUNT(CASE WHEN status = 'closed' THEN 1 END) as completed,
+        ROUND(
+          COUNT(CASE WHEN status = 'closed' THEN 1 END) * 100.0 / COUNT(*), 
+          2
+        ) as completion_rate
+      FROM conversations
+      WHERE 1=1
+    `;
+    const params = [];
+    let paramCount = 1;
+
+    if (start_date) {
+      sql += ` AND created_at >= $${paramCount}`;
+      params.push(start_date);
+      paramCount++;
+    }
+
+    if (end_date) {
+      sql += ` AND created_at <= $${paramCount}`;
+      params.push(end_date);
+    }
+
+    const result = await query(sql, params);
     return result.rows[0];
+  }
+
+  /**
+   * Get message type distribution
+   */
+  static async getMessageTypeDistribution() {
+    const sql = `
+      SELECT 
+        message_type,
+        COUNT(*) as count,
+        ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM messages), 2) as percentage
+      FROM messages
+      GROUP BY message_type
+      ORDER BY count DESC
+    `;
+
+    const result = await query(sql);
+    return result.rows;
   }
 }
 
