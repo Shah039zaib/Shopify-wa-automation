@@ -322,6 +322,21 @@ class AIAnalytics {
     const result = await query(sql);
     return result.rows[0];
   }
+
+  /**
+   * Increment usage counter for provider (used by ai-router)
+   */
+  static async incrementUsage(providerName, success) {
+    // This is a simple in-memory counter for now
+    // In production, you might want to store this in Redis or database
+    try {
+      // Log the usage increment - actual tracking is done via ai_logs table
+      const { logger } = require('../utils/logger');
+      logger.info(`AI usage: ${providerName} - ${success ? 'success' : 'failure'}`);
+    } catch (error) {
+      // Silently fail - this is just for tracking
+    }
+  }
 }
 
 module.exports = AIAnalytics;

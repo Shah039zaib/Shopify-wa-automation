@@ -6,7 +6,9 @@
 const Order = require('../models/Order');
 const Customer = require('../models/Customer');
 const Package = require('../models/Package');
+const paymentRequestService = require('../services/payment-request.service');
 const { NotFoundError, BadRequestError } = require('../utils/error-handler');
+const { logger } = require('../utils/logger');
 
 /**
  * Get all orders
@@ -61,7 +63,7 @@ exports.getOrder = async (req, res, next) => {
  */
 exports.createOrder = async (req, res, next) => {
   try {
-    const { customer_id, package_id, amount } = req.body;
+    const { customer_id, package_id, amount, send_payment_request = true } = req.body;
 
     // Verify customer exists
     const customer = await Customer.findById(customer_id);
@@ -78,13 +80,127 @@ exports.createOrder = async (req, res, next) => {
     const order = await Order.create({
       customer_id,
       package_id,
-      amount
+      amount: amount || pkg.price
     });
+
+    // Automatically send payment request if enabled
+    let paymentRequestResult = null;
+    if (send_payment_request) {
+      try {
+        paymentRequestResult = await paymentRequestService.sendPaymentRequest(order.id);
+        logger.info(`Payment request sent for order: ${order.id}`);
+      } catch (paymentError) {
+        logger.error(`Failed to send payment request for order ${order.id}:`, paymentError);
+        // Don't fail the order creation if payment request fails
+      }
+    }
 
     res.status(201).json({
       success: true,
       message: 'Order created successfully',
-      data: order
+      data: order,
+      payment_request: paymentRequestResult
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Send payment request for existing order
+ * POST /api/orders/:id/send-payment-request
+ */
+exports.sendPaymentRequest = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const order = await Order.findById(id);
+    if (!order) {
+      throw new NotFoundError('Order not found');
+    }
+
+    const result = await paymentRequestService.sendPaymentRequest(id);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: result.error
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Payment request sent successfully',
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Send payment reminder
+ * POST /api/orders/:id/send-reminder
+ */
+exports.sendPaymentReminder = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { reminder_number = 1 } = req.body;
+
+    const order = await Order.findById(id);
+    if (!order) {
+      throw new NotFoundError('Order not found');
+    }
+
+    const result = await paymentRequestService.sendPaymentReminder(id, reminder_number);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: result.error
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Payment reminder sent successfully',
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Confirm payment received
+ * POST /api/orders/:id/confirm-payment
+ */
+exports.confirmPayment = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const order = await Order.findById(id);
+    if (!order) {
+      throw new NotFoundError('Order not found');
+    }
+
+    // Update order status to paid
+    await Order.updateStatus(id, 'paid');
+
+    // Update customer stats
+    await Customer.incrementOrderStats(order.customer_id, order.amount);
+
+    // Send confirmation message to customer
+    const result = await paymentRequestService.sendPaymentConfirmation(id);
+
+    res.json({
+      success: true,
+      message: 'Payment confirmed successfully',
+      data: {
+        order_id: id,
+        status: 'paid',
+        confirmation_sent: result.success
+      }
     });
   } catch (error) {
     next(error);

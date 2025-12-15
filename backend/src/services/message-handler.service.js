@@ -6,8 +6,22 @@
 const Customer = require('../models/Customer');
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
+const Order = require('../models/Order');
+const paymentRequestService = require('./payment-request.service');
 const { logger } = require('../utils/logger');
 const { fromChatId } = require('../utils/phone-formatter');
+
+/**
+ * Check if customer has pending payment order
+ */
+async function hasPendingPaymentOrder(customerId) {
+  try {
+    const orders = await Order.getByCustomer(customerId);
+    return orders.some(o => o.status === 'payment_pending');
+  } catch (error) {
+    return false;
+  }
+}
 
 /**
  * Process incoming WhatsApp message
@@ -49,22 +63,60 @@ async function processMessage(message, accountId, client) {
       logger.whatsapp(`New conversation created for customer: ${customer.id}`);
     }
 
+    // Check if this is an image message and customer has pending payment
+    let mediaUrl = null;
+    let isPaymentScreenshot = false;
+
+    if (message.hasMedia && ['image', 'document'].includes(message.type)) {
+      try {
+        // Download media
+        const media = await message.downloadMedia();
+        if (media) {
+          // Create data URL for storage
+          mediaUrl = `data:${media.mimetype};base64,${media.data}`;
+
+          // Check if customer has pending payment order
+          if (await hasPendingPaymentOrder(customer.id)) {
+            isPaymentScreenshot = true;
+            logger.whatsapp(`Payment screenshot received from ${phoneNumber}`);
+          }
+        }
+      } catch (mediaError) {
+        logger.error('Error downloading media:', mediaError);
+      }
+    }
+
     // Save incoming message
     await Message.create({
       conversation_id: conversation.id,
       sender: 'customer',
-      message_text: message.body,
+      message_text: message.body || (message.hasMedia ? '[Media]' : ''),
       message_type: message.type || 'text',
-      media_url: null
+      media_url: mediaUrl
     });
 
     // Update conversation
     await Conversation.updateLastMessage(conversation.id);
     await Conversation.incrementMessageCount(conversation.id);
 
+    // Process payment screenshot if applicable
+    if (isPaymentScreenshot && mediaUrl) {
+      const result = await paymentRequestService.processPaymentScreenshot(
+        conversation.id,
+        customer.id,
+        mediaUrl
+      );
+
+      if (result.success) {
+        logger.whatsapp(`Payment screenshot processed for order: ${result.order_id}`);
+        // Don't continue with AI response for payment screenshots
+        return;
+      }
+    }
+
     // Detect language
     const languageDetector = require('./language-detector.service');
-    const detectedLanguage = languageDetector.detect(message.body);
+    const detectedLanguage = languageDetector.detect(message.body || '');
 
     if (detectedLanguage !== customer.language_preference) {
       await Customer.update(customer.id, {

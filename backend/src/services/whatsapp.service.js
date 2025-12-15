@@ -172,9 +172,37 @@ function setupEventHandlers(client, accountId, io) {
 }
 
 /**
- * Send message
+ * Simulate typing indicator
+ * Shows "typing..." status to the recipient before sending message
  */
-async function sendMessage(accountId, phoneNumber, message) {
+async function simulateTyping(client, chatId, duration = null) {
+  try {
+    const chat = await client.getChatById(chatId);
+
+    // Calculate typing duration based on message length (if not specified)
+    // Average typing speed: ~200 chars per minute = 3.3 chars per second
+    const typingDuration = duration || Math.min(Math.max(1000, Math.random() * 3000), 5000);
+
+    // Send typing state
+    await chat.sendStateTyping();
+
+    // Wait for typing duration
+    await new Promise(resolve => setTimeout(resolve, typingDuration));
+
+    // Clear typing state
+    await chat.clearState();
+
+    logger.whatsapp(`Typing indicator shown for ${typingDuration}ms`);
+  } catch (error) {
+    // Don't fail the message send if typing indicator fails
+    logger.warn('Failed to show typing indicator:', error.message);
+  }
+}
+
+/**
+ * Send message with typing indicator
+ */
+async function sendMessage(accountId, phoneNumber, message, options = {}) {
   try {
     const client = activeClients.get(accountId);
 
@@ -185,6 +213,16 @@ async function sendMessage(accountId, phoneNumber, message) {
     // Format phone number for WhatsApp
     const { formatForWhatsApp } = require('../utils/phone-formatter');
     const chatId = `${formatForWhatsApp(phoneNumber)}@c.us`;
+
+    // Show typing indicator before sending (unless disabled)
+    if (options.showTyping !== false) {
+      // Calculate typing duration based on message length
+      const charsPerSecond = 3.3;
+      const baseDuration = Math.ceil(message.length / charsPerSecond) * 1000;
+      const typingDuration = Math.min(Math.max(1500, baseDuration), 5000); // Between 1.5s and 5s
+
+      await simulateTyping(client, chatId, typingDuration);
+    }
 
     // Send message
     await client.sendMessage(chatId, message);
@@ -300,6 +338,7 @@ module.exports = {
   initializeWhatsApp,
   sendMessage,
   sendMedia,
+  simulateTyping,
   getClient,
   disconnectClient
 };
