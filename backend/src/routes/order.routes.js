@@ -94,6 +94,39 @@ router.put(
 );
 
 /**
+ * POST /api/orders/:id/send-payment-request
+ * Send payment request to customer
+ */
+router.post(
+  '/:id/send-payment-request',
+  requireAuth,
+  validateParams({ id: { required: true, uuid: true } }),
+  orderController.sendPaymentRequest
+);
+
+/**
+ * POST /api/orders/:id/send-reminder
+ * Send payment reminder to customer
+ */
+router.post(
+  '/:id/send-reminder',
+  requireAuth,
+  validateParams({ id: { required: true, uuid: true } }),
+  orderController.sendPaymentReminder
+);
+
+/**
+ * POST /api/orders/:id/confirm-payment
+ * Confirm payment received
+ */
+router.post(
+  '/:id/confirm-payment',
+  requireAuth,
+  validateParams({ id: { required: true, uuid: true } }),
+  orderController.confirmPayment
+);
+
+/**
  * DELETE /api/orders/:id
  * Delete order
  */

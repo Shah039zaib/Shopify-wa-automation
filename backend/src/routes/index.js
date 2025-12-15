@@ -21,6 +21,7 @@ const packageRoutes = require('./package.routes');
 const templateRoutes = require('./template.routes');
 const analyticsRoutes = require('./analytics.routes');
 const settingsRoutes = require('./settings.routes');
+const exportRoutes = require('./export.routes');
 
 // Mount routes
 router.use('/health', healthRoutes);
@@ -37,6 +38,7 @@ router.use('/packages', packageRoutes);
 router.use('/templates', templateRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/settings', settingsRoutes);
+router.use('/export', exportRoutes);
 
 // API info route
 router.get('/', (req, res) => {
@@ -58,7 +60,8 @@ router.get('/', (req, res) => {
       packages: '/api/packages',
       templates: '/api/templates',
       analytics: '/api/analytics',
-      settings: '/api/settings'
+      settings: '/api/settings',
+      export: '/api/export'
     }
   });
 });
