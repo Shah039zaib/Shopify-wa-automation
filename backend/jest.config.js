@@ -17,7 +17,10 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/'],
   verbose: true,
   forceExit: true,
+  detectOpenHandles: false,
+  testTimeout: 10000,
   clearMocks: true,
   resetMocks: true,
-  restoreMocks: true
+  restoreMocks: true,
+  modulePathIgnorePatterns: ['<rootDir>/node_modules/']
 };
