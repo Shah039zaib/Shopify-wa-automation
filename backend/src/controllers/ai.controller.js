@@ -8,7 +8,7 @@ const AIKey = require('../models/AIKey');
 const AIPrompt = require('../models/AIPrompt');
 const AILog = require('../models/AILog');
 const AIAnalytics = require('../models/AIAnalytics');
-const { NotFoundError, BadRequestError } = require('../utils/error-handler');
+const { NotFoundError } = require('../utils/error-handler');
 
 /**
  * Get all AI providers

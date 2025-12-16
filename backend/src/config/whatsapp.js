@@ -3,8 +3,6 @@
  * Settings for WhatsApp Web.js client
  */
 
-const path = require('path');
-
 const whatsappConfig = {
   // Session configuration
   sessionPath: process.env.WHATSAPP_SESSION_PATH || './.wwebjs_auth',

@@ -13,7 +13,7 @@ module.exports = {
     'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     'no-console': 'off',
     'semi': ['error', 'always'],
-    'quotes': ['warn', 'single', { avoidEscape: true }]
+    'quotes': ['warn', 'single', { avoidEscape: true, allowTemplateLiterals: true }]
   },
   ignorePatterns: ['node_modules/', 'coverage/']
 };

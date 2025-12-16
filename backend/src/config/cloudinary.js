@@ -66,11 +66,11 @@ const uploadPresets = {
  */
 async function testConnection() {
   try {
-    const result = await cloudinary.api.ping();
-    logger.info('✅ Cloudinary connection successful');
+    await cloudinary.api.ping();
+    logger.info('Cloudinary connection successful');
     return true;
   } catch (error) {
-    logger.error('❌ Cloudinary connection failed:', error.message);
+    logger.error('Cloudinary connection failed:', error.message);
     return false;
   }
 }
