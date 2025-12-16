@@ -57,7 +57,7 @@ async function query(text, params) {
 async function getClient() {
   try {
     const client = await pool.connect();
-    const query = client.query.bind(client);
+    const _query = client.query.bind(client); // eslint-disable-line no-unused-vars
     const release = client.release.bind(client);
 
     // Set a timeout for client checkout

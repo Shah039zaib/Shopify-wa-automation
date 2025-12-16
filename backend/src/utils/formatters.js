@@ -222,16 +222,16 @@ function maskData(data, type = 'default') {
   if (!data) return '';
   
   switch (type) {
-    case 'email':
+    case 'email': {
       const [name, domain] = data.split('@');
       return `${name.charAt(0)}${'*'.repeat(name.length - 2)}${name.charAt(name.length - 1)}@${domain}`;
-    
+    }
     case 'phone':
       return data.slice(0, 4) + '*'.repeat(data.length - 8) + data.slice(-4);
-    
+
     case 'card':
       return '*'.repeat(data.length - 4) + data.slice(-4);
-    
+
     default:
       return '*'.repeat(data.length - 4) + data.slice(-4);
   }

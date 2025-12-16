@@ -1,0 +1,103 @@
+name: CI Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  # Backend Tests
+  backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm install --legacy-peer-deps
+
+      - name: Run linter
+        working-directory: ./backend
+        run: npm run lint --if-present
+        continue-on-error: true
+
+      - name: Run tests
+        working-directory: ./backend
+        run: npm test
+        env:
+          NODE_ENV: test
+
+      - name: Check for syntax errors
+        working-directory: ./backend
+        run: node --check server.js
+
+  # Frontend Tests
+  frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm install --legacy-peer-deps
+
+      - name: Run linter
+        working-directory: ./frontend
+        run: npm run lint --if-present
+        continue-on-error: true
+
+      - name: Run tests
+        working-directory: ./frontend
+        run: npm test -- --passWithNoTests
+        env:
+          NODE_ENV: test
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:5000/api
+          NEXT_PUBLIC_SOCKET_URL: http://localhost:5000
+
+  # Security Check
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install and audit Backend
+        working-directory: ./backend
+        run: |
+          npm install --legacy-peer-deps
+          npm audit --audit-level=high || true
+
+      - name: Install and audit Frontend
+        working-directory: ./frontend
+        run: |
+          npm install --legacy-peer-deps
+          npm audit --audit-level=high || true
