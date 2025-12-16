@@ -63,6 +63,12 @@ jobs:
         run: npm run lint --if-present
         continue-on-error: true
 
+      - name: Run tests
+        working-directory: ./frontend
+        run: npm test -- --passWithNoTests
+        env:
+          NODE_ENV: test
+
       - name: Build frontend
         working-directory: ./frontend
         run: npm run build
