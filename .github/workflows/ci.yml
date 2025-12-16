@@ -20,12 +20,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
         working-directory: ./backend
-        run: npm ci --legacy-peer-deps || npm install
+        run: npm install --legacy-peer-deps
 
       - name: Run linter
         working-directory: ./backend
@@ -56,12 +54,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         working-directory: ./frontend
-        run: npm ci --legacy-peer-deps || npm install
+        run: npm install --legacy-peer-deps
 
       - name: Run linter
         working-directory: ./frontend
@@ -84,10 +80,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run security audit (Backend)
-        working-directory: ./backend
-        run: npm audit --audit-level=high || true
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
 
-      - name: Run security audit (Frontend)
+      - name: Install and audit Backend
+        working-directory: ./backend
+        run: |
+          npm install --legacy-peer-deps
+          npm audit --audit-level=high || true
+
+      - name: Install and audit Frontend
         working-directory: ./frontend
-        run: npm audit --audit-level=high || true
+        run: |
+          npm install --legacy-peer-deps
+          npm audit --audit-level=high || true
